@@ -11,19 +11,25 @@
 #include <unistd.h>
 #endif
 
-#define VERSION "v0.2"
+#define VERSION "v0.3"
 
 #include "rs232.h"
 
-int CPORT_NR = 2;
-int BDRATE = 38400;
+int CPORT_NR = 4;
+int BDRATE = 115200;
+char FORMAT = 's';
 char mode[]={'8','N','1',0};
-char tx_buf[512]= {0,0,0,0,0,0,0,0,0};
+
+//char keyin_buf[512]= {0};
+char tx_buf[512]= {0};
 
 void RS232_tx();
 void RS232_rx();
 
 uint8_t IsConnected = 0;
+
+int tx_formating(void);
+void rx_formating(uint8_t *buf_p,uint8_t len);
 
 int main(int argc, char **argv) {
 	int ch;
@@ -34,12 +40,13 @@ int main(int argc, char **argv) {
 			{"version"  , no_argument      , 0, 'v'},
             {"port"     , required_argument, 0, 'p'},
 			{"baudrate" , required_argument, 0, 'b'},
+			{"Format"	, required_argument, 0,	'f'},
             {0, 0, 0, 0}
           };
         /* getopt_long stores the option index here. */
         int option_index = 0;
 
-        ch = getopt_long (argc, argv, "p:b:v",
+        ch = getopt_long (argc, argv, "p:b:f:v",
                          long_options, &option_index);
 
         /* Detect the end of the options. */
@@ -62,6 +69,9 @@ int main(int argc, char **argv) {
 				break;
 			case 'p':
 				CPORT_NR = (int)strtoimax(optarg,NULL,10)-1;
+				break;
+			case 'f':
+				FORMAT = *optarg;
 				break;
 			case 'v':
 				printf("Now version is %s\n",VERSION);
@@ -98,13 +108,13 @@ int main(int argc, char **argv) {
 	if(RS232_OpenComport(CPORT_NR, BDRATE, mode)) {
 		printf("Can not connect to COM%d\n",CPORT_NR+1);
 	} else {
-		printf("Connect to COM%d\n",CPORT_NR+1);
+		printf("Connect to COM%d , Format is %c\n",CPORT_NR+1,FORMAT);
 		IsConnected = 1;
 		while ( 1 ) {
 			scanf("%s",tx_buf);
 			if(strcmp(tx_buf,"q")==0) break;
-			RS232_cputs(CPORT_NR,tx_buf);
-			RS232_SendByte(CPORT_NR, 10 );
+			int len = tx_formating();
+			RS232_SendBuf(CPORT_NR,tx_buf,len);
 		}
 		RS232_CloseComport(CPORT_NR);
 		printf("Disconnect from COM%d\n",CPORT_NR+1);
@@ -125,16 +135,35 @@ void RS232_tx() {
     }
   return;
 }
+
+
+int tx_formating(void){
+	int offset=0;
+	unsigned int data=0;
+	int input_idx = 0;
+
+	char temp[512]={0};
+	int temp_idx = 0;
+
+	while(sscanf(tx_buf+input_idx,"%2x%n",&data,&offset)!=EOF) {
+		input_idx+=offset;
+		temp[temp_idx] = (unsigned char)data;
+		temp_idx++;
+	}
+	memcpy(tx_buf,temp,temp_idx);
+	return temp_idx;
+}
+
 void RS232_rx() {
     int n;
 	uint8_t rx_buf[4096];
 	while(1)
     while( IsConnected ) {
         n = RS232_PollComport(CPORT_NR, rx_buf, 4095);
-
         if(n > 0) {
+			rx_formating(rx_buf,n);
             rx_buf[n] = 0;
-            printf("%s",(char *)rx_buf);
+            printf("%s\n",(char *)rx_buf);
         }
 
         #ifdef _WIN32
@@ -144,4 +173,20 @@ void RS232_rx() {
         #endif
     }
 
+}
+void rx_formating(uint8_t *buf_p,uint8_t len){
+	int n=0;
+	int16_t offset=0;
+	char temp[4096];
+	int temp_idx = 0;
+	unsigned int data=0;
+
+	while(n<len) {
+		data = *(buf_p+n);
+		offset = sprintf(temp+temp_idx,"%02x",data);
+		temp_idx+=offset;
+		n++;
+	}
+	sprintf(temp+temp_idx,"%c",'\0');
+	memcpy((char*)buf_p,temp,temp_idx+1);
 }
