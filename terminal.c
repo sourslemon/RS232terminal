@@ -162,8 +162,7 @@ void RS232_rx() {
         n = RS232_PollComport(CPORT_NR, rx_buf, 4095);
         if(n > 0) {
 			rx_formating(rx_buf,n);
-            rx_buf[n] = 0;
-            printf("%s\n",(char *)rx_buf);
+            printf_s("%s\n",(char *)rx_buf);
         }
 
         #ifdef _WIN32
@@ -183,7 +182,7 @@ void rx_formating(uint8_t *buf_p,uint8_t len){
 
 	while(n<len) {
 		data = *(buf_p+n);
-		offset = sprintf(temp+temp_idx,"%02x",data);
+		offset = sprintf(temp+temp_idx,"%02X",data);
 		temp_idx+=offset;
 		n++;
 	}
